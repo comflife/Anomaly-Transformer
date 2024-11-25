@@ -1,290 +1,68 @@
-import torch
+# data_factory/data_loader.py
+
 import os
-import random
-from torch.utils.data import Dataset, DataLoader
-from PIL import Image
-import numpy as np
-import collections
-import numbers
-import math
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
-import pickle
-from typing import Dict, Union
+import numpy as np
+from torch.utils.data import Dataset, DataLoader
+import torch
+from typing import List, Dict, Union, Optional
 
-# Configuration class to manage hyperparameters
-class CFG:
-    WINDOW_GIVEN = 100  # Example value, adjust as needed
-
-# Segment-based Data Loaders
-
-class PSMSegLoader(Dataset):
-    def __init__(self, data_path, win_size, step, mode="train"):
-        self.mode = mode
-        self.step = step
-        self.win_size = win_size
-        self.scaler = StandardScaler()
-        data = pd.read_csv(os.path.join(data_path, 'train.csv'))
-        data = data.values[:, 1:]
-        data = np.nan_to_num(data)
-        self.scaler.fit(data)
-        data = self.scaler.transform(data)
-        test_data = pd.read_csv(os.path.join(data_path, 'test.csv'))
-        test_data = test_data.values[:, 1:]
-        test_data = np.nan_to_num(test_data)
-        self.test = self.scaler.transform(test_data)
-        self.train = data
-        self.val = self.test
-        self.test_labels = pd.read_csv(os.path.join(data_path, 'test_label.csv')).values[:, 1:]
-
-        print("PSM - test:", self.test.shape)
-        print("PSM - train:", self.train.shape)
-
-    def __len__(self):
-        if self.mode == "train":
-            return (self.train.shape[0] - self.win_size) // self.step + 1
-        elif self.mode == 'val':
-            return (self.val.shape[0] - self.win_size) // self.step + 1
-        elif self.mode == 'test':
-            return (self.test.shape[0] - self.win_size) // self.step + 1
-        else:
-            return (self.test.shape[0] - self.win_size) // self.win_size + 1
-
-    def __getitem__(self, index):
-        index = index * self.step
-        if self.mode == "train":
-            return (
-                torch.from_numpy(self.train[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[0:self.win_size]).float()
-            )
-        elif self.mode == 'val':
-            return (
-                torch.from_numpy(self.val[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[0:self.win_size]).float()
-            )
-        elif self.mode == 'test':
-            return (
-                torch.from_numpy(self.test[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[index:index + self.win_size]).float()
-            )
-        else:
-            return (
-                torch.from_numpy(
-                    self.test[
-                        (index // self.step) * self.win_size : (index // self.step) * self.win_size + self.win_size
-                    ]
-                ).float(),
-                torch.from_numpy(
-                    self.test_labels[
-                        (index // self.step) * self.win_size : (index // self.step) * self.win_size + self.win_size
-                    ]
-                ).float()
-            )
-
-
-class MSLSegLoader(Dataset):
-    def __init__(self, data_path, win_size, step, mode="train"):
-        self.mode = mode
-        self.step = step
-        self.win_size = win_size
-        self.scaler = StandardScaler()
-        data = np.load(os.path.join(data_path, "MSL_train.npy"))
-        self.scaler.fit(data)
-        data = self.scaler.transform(data)
-        test_data = np.load(os.path.join(data_path, "MSL_test.npy"))
-        self.test = self.scaler.transform(test_data)
-        self.train = data
-        self.val = self.test
-        self.test_labels = np.load(os.path.join(data_path, "MSL_test_label.npy"))
-        print("MSL - test:", self.test.shape)
-        print("MSL - train:", self.train.shape)
-
-    def __len__(self):
-        if self.mode == "train":
-            return (self.train.shape[0] - self.win_size) // self.step + 1
-        elif self.mode == 'val':
-            return (self.val.shape[0] - self.win_size) // self.step + 1
-        elif self.mode == 'test':
-            return (self.test.shape[0] - self.win_size) // self.step + 1
-        else:
-            return (self.test.shape[0] - self.win_size) // self.win_size + 1
-
-    def __getitem__(self, index):
-        index = index * self.step
-        if self.mode == "train":
-            return (
-                torch.from_numpy(self.train[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[0:self.win_size]).float()
-            )
-        elif self.mode == 'val':
-            return (
-                torch.from_numpy(self.val[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[0:self.win_size]).float()
-            )
-        elif self.mode == 'test':
-            return (
-                torch.from_numpy(self.test[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[index:index + self.win_size]).float()
-            )
-        else:
-            return (
-                torch.from_numpy(
-                    self.test[
-                        (index // self.step) * self.win_size : (index // self.step) * self.win_size + self.win_size
-                    ]
-                ).float(),
-                torch.from_numpy(
-                    self.test_labels[
-                        (index // self.step) * self.win_size : (index // self.step) * self.win_size + self.win_size
-                    ]
-                ).float()
-            )
-
-
-class SMAPSegLoader(Dataset):
-    def __init__(self, data_path, win_size, step, mode="train"):
-        self.mode = mode
-        self.step = step
-        self.win_size = win_size
-        self.scaler = StandardScaler()
-        data = np.load(os.path.join(data_path, "SMAP_train.npy"))
-        self.scaler.fit(data)
-        data = self.scaler.transform(data)
-        test_data = np.load(os.path.join(data_path, "SMAP_test.npy"))
-        self.test = self.scaler.transform(test_data)
-        self.train = data
-        self.val = self.test
-        self.test_labels = np.load(os.path.join(data_path, "SMAP_test_label.npy"))
-        print("SMAP - test:", self.test.shape)
-        print("SMAP - train:", self.train.shape)
-
-    def __len__(self):
-        if self.mode == "train":
-            return (self.train.shape[0] - self.win_size) // self.step + 1
-        elif self.mode == 'val':
-            return (self.val.shape[0] - self.win_size) // self.step + 1
-        elif self.mode == 'test':
-            return (self.test.shape[0] - self.win_size) // self.step + 1
-        else:
-            return (self.test.shape[0] - self.win_size) // self.win_size + 1
-
-    def __getitem__(self, index):
-        index = index * self.step
-        if self.mode == "train":
-            return (
-                torch.from_numpy(self.train[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[0:self.win_size]).float()
-            )
-        elif self.mode == 'val':
-            return (
-                torch.from_numpy(self.val[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[0:self.win_size]).float()
-            )
-        elif self.mode == 'test':
-            return (
-                torch.from_numpy(self.test[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[index:index + self.win_size]).float()
-            )
-        else:
-            return (
-                torch.from_numpy(
-                    self.test[
-                        (index // self.step) * self.win_size : (index // self.step) * self.win_size + self.win_size
-                    ]
-                ).float(),
-                torch.from_numpy(
-                    self.test_labels[
-                        (index // self.step) * self.win_size : (index // self.step) * self.win_size + self.win_size
-                    ]
-                ).float()
-            )
-
-
-class SMDSegLoader(Dataset):
-    def __init__(self, data_path, win_size, step, mode="train"):
-        self.mode = mode
-        self.step = step
-        self.win_size = win_size
-        self.scaler = StandardScaler()
-        data = np.load(os.path.join(data_path, "SMD_train.npy"))
-        self.scaler.fit(data)
-        data = self.scaler.transform(data)
-        test_data = np.load(os.path.join(data_path, "SMD_test.npy"))
-        self.test = self.scaler.transform(test_data)
-        self.train = data
-        data_len = len(self.train)
-        self.val = self.train[int(data_len * 0.8):]
-        self.test_labels = np.load(os.path.join(data_path, "SMD_test_label.npy"))
-        print("SMD - test:", self.test.shape)
-        print("SMD - train:", self.train.shape)
-
-    def __len__(self):
-        if self.mode == "train":
-            return (self.train.shape[0] - self.win_size) // self.step + 1
-        elif self.mode == 'val':
-            return (self.val.shape[0] - self.win_size) // self.step + 1
-        elif self.mode == 'test':
-            return (self.test.shape[0] - self.win_size) // self.step + 1
-        else:
-            return (self.test.shape[0] - self.win_size) // self.win_size + 1
-
-    def __getitem__(self, index):
-        index = index * self.step
-        if self.mode == "train":
-            return (
-                torch.from_numpy(self.train[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[0:self.win_size]).float()
-            )
-        elif self.mode == 'val':
-            return (
-                torch.from_numpy(self.val[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[0:self.win_size]).float()
-            )
-        elif self.mode == 'test':
-            return (
-                torch.from_numpy(self.test[index:index + self.win_size]).float(),
-                torch.from_numpy(self.test_labels[index:index + self.win_size]).float()
-            )
-        else:
-            return (
-                torch.from_numpy(
-                    self.test[
-                        (index // self.step) * self.win_size : (index // self.step) * self.win_size + self.win_size
-                    ]
-                ).float(),
-                torch.from_numpy(
-                    self.test_labels[
-                        (index // self.step) * self.win_size : (index // self.step) * self.win_size + self.win_size
-                    ]
-                ).float()
-            )
-
-# TimeSeriesDataset Class
+# 설정 파일 또는 클래스에서 WINDOW_GIVEN을 가져옵니다.
+# 여기서는 예시로 100을 사용합니다. 필요에 따라 수정하세요.
+WINDOW_GIVEN = 100
 
 class TimeSeriesDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, stride: int = 1, inference: bool = False) -> None:
+    def __init__(self, data_path: str, stride: int = 1, inference: bool = False) -> None:
         """
+        Time Series Dataset
+
         Args:
-            df: 입력 데이터프레임
-            stride: 윈도우 스트라이드
-            inference: 추론 모드 여부
+            data_path (str): 디렉토리 경로로, 모든 TimeSeries CSV 파일이 포함되어야 합니다.
+            stride (int): 시퀀스 생성 시 윈도우 스트라이드.
+            inference (bool): 추론 모드 여부.
         """
         self.inference = inference
-        self.column_names = df.filter(regex='^P\\d+$').columns.tolist()
-        self.file_ids = df['file_id'].values if 'file_id' in df.columns else None
+        self.column_names = []
+        self.file_ids = []
+        self.values = []
+        
+        # 디렉토리 내 모든 CSV 파일 나열
+        csv_files = [f for f in os.listdir(data_path) if f.endswith('.csv')]
+        if not csv_files:
+            raise ValueError(f"No CSV files found in the directory: {data_path}")
+        
+        # 모든 CSV 파일 읽고 병합
+        df_list = []
+        for csv_file in csv_files:
+            csv_path = os.path.join(data_path, csv_file)
+            df = pd.read_csv(csv_path)
+            df_list.append(df)
+        
+        combined_df = pd.concat(df_list, ignore_index=True)
+        
+        # '^P\d+$' 패턴에 맞는 열 이름 식별 (P1-P26)
+        self.column_names = combined_df.filter(regex='^P\\d+$').columns.tolist()
+        if not self.column_names:
+            raise ValueError("No columns matching the pattern '^P\\d+$' found in the CSV files.")
+        
+        # P1-P26만 사용 (26개)
+        if len(self.column_names) != 26:
+            raise ValueError(f"Expected 26 P columns, but found {len(self.column_names)}.")
+        
+        self.file_ids = combined_df['file_id'].values if 'file_id' in combined_df.columns else None
 
-        if inference:
-            self.values = df[self.column_names].values.astype(np.float32)
+        if self.inference:
+            self.values = combined_df[self.column_names].values.astype(np.float32)
             self._prepare_inference_data()
         else:
-            self._prepare_training_data(df, stride)
+            self._prepare_training_data(combined_df, stride)
 
     def _normalize_columns(self, data: np.ndarray) -> np.ndarray:
-        """벡터화된 열 정규화"""
+        """각 열을 독립적으로 정규화."""
         mins = data.min(axis=0, keepdims=True)
         maxs = data.max(axis=0, keepdims=True)
 
-        # mins와 maxs가 같으면 전체를 0으로 반환
+        # min과 max가 같은 경우, 정규화된 데이터를 0으로 설정
         is_constant = (maxs == mins)
         if np.any(is_constant):
             normalized_data = np.zeros_like(data)
@@ -295,42 +73,42 @@ class TimeSeriesDataset(Dataset):
         return (data - mins) / (maxs - mins)
 
     def _prepare_inference_data(self) -> None:
-        """추론 데이터 준비 - 단일 시퀀스"""
+        """추론을 위한 데이터 준비 - 단일 시퀀스."""
         self.normalized_values = self._normalize_columns(self.values)
 
     def _prepare_training_data(self, df: pd.DataFrame, stride: int) -> None:
-        """학습 데이터 준비 - 윈도우 단위"""
+        """훈련을 위한 데이터 준비 - 윈도우 기반."""
         self.values = df[self.column_names].values.astype(np.float32)
 
-        # 시작 인덱스 계산 (stride 적용)
-        potential_starts = np.arange(0, len(df) - CFG.WINDOW_GIVEN, stride)
+        # 스트라이드에 따른 가능한 시작 인덱스 계산
+        potential_starts = np.arange(0, len(df) - WINDOW_GIVEN, stride)
 
-        # 각 윈도우의 마지막 다음 지점(window_size + 1)이 사고가 없는(0) 경우만 필터링
+        # 윈도우 끝에서 'anomaly'가 0인 시작 인덱스 필터링
+        if 'anomaly' not in df.columns:
+            raise ValueError("The DataFrame must contain an 'anomaly' column for training.")
         accident_labels = df['anomaly'].values
         valid_starts = [
             idx for idx in potential_starts
-            if idx + CFG.WINDOW_GIVEN < len(df) and  # 범위 체크
-            accident_labels[idx + CFG.WINDOW_GIVEN] == 0  # 윈도우 다음 지점 체크
+            if idx + WINDOW_GIVEN < len(df) and  # 범위 확인
+            accident_labels[idx + WINDOW_GIVEN] == 0  # 윈도우 끝에 이상이 없을 때
         ]
         self.start_idx = np.array(valid_starts)
 
-        # 유효한 윈도우들만 추출하여 정규화
+        # 윈도우 추출 및 정규화
         windows = np.array([
-            self.values[i:i + CFG.WINDOW_GIVEN]
+            self.values[i:i + WINDOW_GIVEN]
             for i in self.start_idx
-        ])
+        ])  # Shape: [num_windows, window_size, channels]
 
-        # (윈도우 수, 윈도우 크기, 특성 수)로 한번에 정규화
-        self.input_data = np.stack([
-            self._normalize_columns(window) for window in windows
-        ])
+        # 각 윈도우 정규화
+        self.input_data = self._normalize_columns(windows)  # Shape: [num_windows, window_size, channels]
 
     def __len__(self) -> int:
         if self.inference:
             return len(self.column_names)
-        return len(self.start_idx) * len(self.column_names)
+        return len(self.start_idx)
 
-    def __getitem__(self, idx: int) -> Dict[str, Union[str, torch.Tensor]]:
+    def __getitem__(self, idx: int) -> Dict[str, Union[str, torch.Tensor, Optional[str]]]:
         if self.inference:
             col_idx = idx
             col_name = self.column_names[col_idx]
@@ -338,56 +116,93 @@ class TimeSeriesDataset(Dataset):
             file_id = self.file_ids[idx] if self.file_ids is not None else None
             return {
                 "column_name": col_name,
-                "input": torch.from_numpy(col_data).unsqueeze(-1),  # (time_steps, 1)
-                "file_id": file_id
+                "inputs": torch.from_numpy(col_data).unsqueeze(0)  # Shape: (1, time_steps)
             }
 
-        window_idx = idx // len(self.column_names)
-        col_idx = idx % len(self.column_names)
+        window_idx = idx  # __len__은 len(start_idx)와 동일
+
+        # 모든 채널에 대한 윈도우 데이터 추출
+        window_data = self.input_data[window_idx]  # Shape: [window_size, channels]
+        window_data = window_data.transpose(0, 1)  # Shape: [channels, window_size]
 
         return {
-            "column_name": self.column_names[col_idx],
-            "input": torch.from_numpy(self.input_data[window_idx, :, col_idx]).unsqueeze(-1)
+            "inputs": torch.from_numpy(window_data).float()  # Shape: (channels, window_size)
         }
 
-# Function to get DataLoader
-
-def get_loader_segment(data_path, batch_size, win_size=100, step=100, mode='train', dataset='KDD', use_timeseries=False, stride=1, inference=False):
+def collate_fn_time_series(batch: List[Dict[str, Union[str, torch.Tensor, Optional[str]]]]) -> Dict[str, Union[List[str], torch.Tensor, List[Optional[str]]]]:
     """
+    TimeSeriesDataset에서 반환된 딕셔너리 리스트를 배치로 변환.
+
     Args:
-        data_path: Path to the data directory
-        batch_size: Batch size for DataLoader
-        win_size: Window size for segment-based loaders or WINDOW_GIVEN for TimeSeriesDataset
-        step: Step size for segment-based loaders
-        mode: Mode of the dataset ('train', 'val', 'test', etc.)
-        dataset: Which dataset to use ('SMD', 'MSL', 'SMAP', 'PSM', 'TimeSeries')
-        use_timeseries: Whether to use TimeSeriesDataset
-        stride: Stride for TimeSeriesDataset
-        inference: Inference mode for TimeSeriesDataset
+        batch (List[Dict]): TimeSeriesDataset.__getitem__에서 반환된 딕셔너리 리스트
+
+    Returns:
+        Dict: 배치 데이터
     """
-    if use_timeseries:
-        # Assuming that the data_path contains a CSV file for TimeSeriesDataset
-        df_path = os.path.join(data_path, 'timeseries_data.csv')  # Modify as needed
-        df = pd.read_csv(df_path)
-        dataset = TimeSeriesDataset(df=df, stride=stride, inference=inference)
+    # 첫 번째 아이템에 'column_name' 키가 있는지 확인
+    has_column_name = 'column_name' in batch[0]
+    
+    if has_column_name:
+        # 추론 모드: 'column_name'과 'inputs'을 포함
+        column_names = [item['column_name'] for item in batch]
+        inputs = torch.stack([item['inputs'] for item in batch], dim=0)  # Shape: (batch_size, 1, time_steps)
+        file_ids = [item['file_id'] for item in batch] if 'file_id' in batch[0] else None
+
+        batch_dict = {
+            'column_names': column_names,
+            'inputs': inputs
+        }
+
+        if file_ids is not None:
+            batch_dict['file_ids'] = file_ids
+
     else:
-        if dataset == 'SMD':
-            dataset = SMDSegLoader(data_path, win_size, step, mode)
-        elif dataset == 'MSL':
-            dataset = MSLSegLoader(data_path, win_size, step, mode)
-        elif dataset == 'SMAP':
-            dataset = SMAPSegLoader(data_path, win_size, step, mode)
-        elif dataset == 'PSM':
-            dataset = PSMSegLoader(data_path, win_size, step, mode)
-        else:
-            raise ValueError(f"Unsupported dataset: {dataset}")
+        # 훈련, 검증, 테스트 모드: 'inputs'만 포함
+        inputs = torch.stack([item['inputs'] for item in batch], dim=0)  # Shape: (batch_size, channels, window_size)
 
-    shuffle = False
-    if mode == 'train':
-        shuffle = True
+        batch_dict = {
+            'inputs': inputs  # Shape: [batch_size, channels, window_size]
+        }
 
-    data_loader = DataLoader(dataset=dataset,
-                             batch_size=batch_size,
-                             shuffle=shuffle,
-                             num_workers=0)
+    return batch_dict
+
+def get_loader_segment(
+    data_path: str,
+    batch_size: int = 64,
+    win_size: int = WINDOW_GIVEN,
+    stride: int = 1,
+    mode: str = 'train',
+    dataset: str = 'TimeSeries',
+    inference: bool = False
+) -> DataLoader:
+    """
+    TimeSeriesDataset을 위한 DataLoader 반환 함수.
+
+    Args:
+        data_path (str): 데이터 디렉토리 경로.
+        batch_size (int): 배치 크기.
+        win_size (int): 윈도우 크기.
+        stride (int): 스트라이드.
+        mode (str): 데이터 모드 ('train', 'val', 'test', 'inference').
+        dataset (str): 'TimeSeries'로 고정 (다른 데이터셋은 지원하지 않음).
+        inference (bool): 추론 모드 여부.
+
+    Returns:
+        DataLoader: 설정된 DataLoader.
+    """
+    if dataset != 'TimeSeries':
+        raise ValueError(f"Unsupported dataset: {dataset}. Only 'TimeSeries' is supported.")
+
+    # TimeSeriesDataset 초기화
+    ts_dataset = TimeSeriesDataset(data_path=data_path, stride=stride, inference=inference)
+
+    # DataLoader 생성
+    data_loader = DataLoader(
+        dataset=ts_dataset,
+        batch_size=batch_size,
+        shuffle=True if mode == 'train' else False,
+        num_workers=4,  # 시스템에 따라 조정
+        collate_fn=collate_fn_time_series
+    )
+
     return data_loader
