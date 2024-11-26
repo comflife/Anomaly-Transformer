@@ -137,7 +137,7 @@ class Solver(object):
                 prior_loss = 0.0
                 for u in range(len(prior)):
                     # prior[u]의 차원 확인
-                    print(f"Validation: prior[{u}] shape: {prior[u].shape}")
+                    # print(f"Validation: prior[{u}] shape: {prior[u].shape}")
                     # 수정된 prior_sum 계산
                     prior_sum = torch.sum(prior[u], dim=-1, keepdim=True)  # Shape: [256, 8, 100, 1]
 
