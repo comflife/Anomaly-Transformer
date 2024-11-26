@@ -76,6 +76,33 @@ class TimeSeriesDataset(Dataset):
         """추론을 위한 데이터 준비 - 단일 시퀀스."""
         self.normalized_values = self._normalize_columns(self.values)
 
+    # def _prepare_training_data(self, df: pd.DataFrame, stride: int) -> None:
+    #     """훈련을 위한 데이터 준비 - 윈도우 기반."""
+    #     self.values = df[self.column_names].values.astype(np.float32)
+
+    #     # 스트라이드에 따른 가능한 시작 인덱스 계산
+    #     potential_starts = np.arange(0, len(df) - WINDOW_GIVEN, stride)
+
+    #     # 윈도우 끝에서 'anomaly'가 0인 시작 인덱스 필터링
+    #     if 'anomaly' not in df.columns:
+    #         raise ValueError("The DataFrame must contain an 'anomaly' column for training.")
+    #     accident_labels = df['anomaly'].values
+    #     valid_starts = [
+    #         idx for idx in potential_starts
+    #         if idx + WINDOW_GIVEN < len(df) and  # 범위 확인
+    #         accident_labels[idx + WINDOW_GIVEN] == 0  # 윈도우 끝에 이상이 없을 때
+    #     ]
+    #     self.start_idx = np.array(valid_starts)
+
+    #     # 윈도우 추출 및 정규화
+    #     windows = np.array([
+    #         self.values[i:i + WINDOW_GIVEN]
+    #         for i in self.start_idx
+    #     ])  # Shape: [num_windows, window_size, channels]
+
+    #     # 각 윈도우 정규화
+    #     self.input_data = self._normalize_columns(windows)  # Shape: [num_windows, window_size, channels]
+
     def _prepare_training_data(self, df: pd.DataFrame, stride: int) -> None:
         """훈련을 위한 데이터 준비 - 윈도우 기반."""
         self.values = df[self.column_names].values.astype(np.float32)
@@ -94,14 +121,17 @@ class TimeSeriesDataset(Dataset):
         ]
         self.start_idx = np.array(valid_starts)
 
-        # 윈도우 추출 및 정규화
+        # 윈도우 추출
         windows = np.array([
             self.values[i:i + WINDOW_GIVEN]
             for i in self.start_idx
         ])  # Shape: [num_windows, window_size, channels]
 
-        # 각 윈도우 정규화
-        self.input_data = self._normalize_columns(windows)  # Shape: [num_windows, window_size, channels]
+        # 각 윈도우별로 정규화 수행 (수정된 부분)
+        self.input_data = np.stack([
+            self._normalize_columns(window) for window in windows
+        ])  # Shape: [num_windows, window_size, channels]
+
 
     def __len__(self) -> int:
         if self.inference:
